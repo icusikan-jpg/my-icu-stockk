@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบบริหารคลังพัสดุทางการแพทย์ - โรงพยาบาลทศมินทราธิราช</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { 
+      font-family: 'Sarabun', sans-serif; 
+      background-color: #f0f4f8; 
+    }
+    /* โทนสีหลักของหน่วยงาน */
+    .bg-navy-official { background-color: #0b2240; }
+    .bg-navy-sub { background-color: #13335e; }
+    .border-gold-official { border-color: #eab308; }
+    .text-gold-official { color: #facc15; }
+    
+    @media print {
+      body * { visibility: hidden; }
+      #printLabelArea, #printLabelArea * { visibility: visible; }
+      #printLabelArea { 
+        position: fixed; 
+        left: 0; 
+        top: 0; 
+        width: 100%; 
+        border: 1px solid #000 !important; 
+        box-shadow: none !important; 
+      }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="pb-16 flex flex-col min-h-screen">
+
+  <!-- Top Official Navbar -->
+  <header class="bg-navy-official text-white shadow-lg sticky top-0 z-40 border-b-4 border-amber-400">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+      
+      <!-- Logo & Hospital Title -->
+      <div class="flex items-center gap-3.5">
+        <div class="bg-white p-1 rounded-full shadow-md border-2 border-amber-400 shrink-0">
+          <!-- แสดงโลโก้โรงพยาบาล -->
+          <img src="images.jpg" alt="โลโก้โรงพยาบาลทศมินทราธิราช" class="w-14 h-14 md:w-16 md:h-16 object-contain rounded-full">
+        </div>
+        <div>
+          <div class="text-xs md:text-sm font-semibold text-amber-300 tracking-wide">
+            โรงพยาบาลทศมินทราธิราช กรมแพทย์ทหารอากาศ
+          </div>
+          <h1 class="text-base md:text-xl font-bold tracking-tight text-white leading-snug">
+            ระบบบริหารจัดการคลังพัสดุทางการแพทย์ (UDI & FEFO)
+          </h1>
+          <p class="text-[11px] text-blue-200 hidden sm:block">
+            ระบบควบคุมวันหมดอายุ จุดสั่งซื้อ (ROP) และติดตามLot การผลิตแบบเรียลไทม์
+          </p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
+        <button onclick="openScannerModal()" class="bg-blue-700 hover:bg-blue-600 border border-blue-400 text-white px-3.5 py-2 rounded-lg font-semibold text-sm shadow transition flex items-center gap-1.5">
+          <span>📷</span> สแกนบาร์โค้ด
+        </button>
+        <button onclick="openReceiveModal()" class="bg-emerald-700 hover:bg-emerald-600 border border-emerald-400 text-white px-3.5 py-2 rounded-lg font-semibold text-sm shadow transition flex items-center gap-1.5">
+          <span>📥</span> รับพัสดุเข้าคลัง
+        </button>
+        <button onclick="openPrintModal()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 px-3.5 py-2 rounded-lg font-bold text-sm shadow transition flex items-center gap-1.5">
+          <span>🖨️</span> พิมพ์ป้ายบาร์โค้ด
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto p-4 space-y-6 flex-grow w-full">
+
+    <!-- Quick Scan & Staff Selector -->
+    <section class="bg-white p-4 rounded-xl shadow-sm border border-blue-100 border-l-4 border-l-blue-900 space-y-3">
+      <div class="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
+        <label class="text-sm font-bold text-blue-950 flex items-center gap-1.5">
+          <span class="text-amber-500">▪</span> ช่องรับข้อมูลจากเครื่องอ่านบาร์โค้ด (Barcode Scanner)
+        </label>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="font-bold text-slate-600">เจ้าหน้าที่ผู้ปฏิบัติงาน:</span>
+          <input type="text" id="staffNameInput" value="เจ้าหน้าที่คลังพัสดุ" class="border border-slate-300 rounded px-2.5 py-1 text-blue-950 font-semibold w-40 bg-slate-50 focus:bg-white focus:outline-none focus:border-blue-700">
+          <button onclick="fetchInventoryFromSheets()" class="bg-blue-900 hover:bg-blue-800 text-white px-3 py-1 rounded font-semibold transition">
+            🔄 อัปเดตข้อมูล
+          </button>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <input type="text" id="barcodeInput" placeholder="ยิงบาร์โค้ดพัสดุ หรือพิมพ์รหัส UDI / Barcode แล้วกด Enter..."
+          class="flex-1 border-2 border-blue-900/30 rounded-lg px-4 py-2.5 text-base font-mono focus:outline-none focus:border-blue-800 focus:ring-2 focus:ring-amber-400/50 bg-slate-50/50"
+          onkeypress="if(event.key==='Enter') processBarcode(this.value)">
+        <button onclick="processBarcode(document.getElementById('barcodeInput').value)"
+          class="bg-navy-official hover:bg-blue-900 text-amber-300 border border-amber-400/50 px-6 py-2.5 rounded-lg font-bold shadow-sm transition">
+          ค้นหาพัสดุ
+        </button>
+      </div>
+    </section>
+
+    <!-- Top KPI Cards -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+      <div onclick="filterTable('EXPIRED')" class="cursor-pointer bg-white border border-slate-200 border-t-4 border-t-red-600 p-4 rounded-xl shadow-sm hover:shadow-md transition">
+        <div class="text-red-700 text-xs font-bold uppercase tracking-wider">🔴 หมดอายุ / ระงับจ่าย</div>
+        <div class="text-3xl font-bold text-red-700 mt-1" id="kpiExpired">0</div>
+        <div class="text-xs text-slate-500 mt-1">รายการ (คลิกเพื่อตรวจสอบ)</div>
+      </div>
+      <div onclick="filterTable('CRITICAL')" class="cursor-pointer bg-white border border-slate-200 border-t-4 border-t-amber-500 p-4 rounded-xl shadow-sm hover:shadow-md transition">
+        <div class="text-amber-700 text-xs font-bold uppercase tracking-wider">🟠 ใกล้หมดอายุ (&lt; 90 วัน)</div>
+        <div class="text-3xl font-bold text-amber-600 mt-1" id="kpiCritical">0</div>
+        <div class="text-xs text-slate-500 mt-1">ต้องเร่งจ่ายก่อน (หลักการ FEFO)</div>
+      </div>
+      <div onclick="filterTable('ROP')" class="cursor-pointer bg-white border border-slate-200 border-t-4 border-t-indigo-600 p-4 rounded-xl shadow-sm hover:shadow-md transition">
+        <div class="text-indigo-800 text-xs font-bold uppercase tracking-wider">🔵 ต่ำกว่าจุดสั่งซื้อ (ROP)</div>
+        <div class="text-3xl font-bold text-indigo-700 mt-1" id="kpiRop">0</div>
+        <div class="text-xs text-slate-500 mt-1">รายการที่ต้องดำเนินการจัดซื้อ</div>
+      </div>
+      <div onclick="filterTable('ALL')" class="cursor-pointer bg-navy-official border border-blue-900 border-t-4 border-t-amber-400 p-4 rounded-xl shadow-sm hover:shadow-md transition text-white">
+        <div class="text-amber-300 text-xs font-bold uppercase tracking-wider">📦 พัสดุคงคลังทั้งหมด</div>
+        <div class="text-3xl font-bold text-white mt-1" id="kpiTotal">0</div>
+        <div class="text-xs text-blue-200 mt-1">แสดงรายการสต๊อกทุก Lot</div>
+      </div>
+    </section>
+
+    <!-- Inventory Watchlist Table -->
+    <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="p-4 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 bg-slate-50">
+        <div>
+          <h2 class="font-bold text-blue-950 text-base flex items-center gap-2">
+            <span class="w-2 h-5 bg-amber-400 rounded-sm inline-block"></span>
+            บัญชีคุมพัสดุทางการแพทย์ เรียงตามลำดับวันหมดอายุ (FEFO)
+          </h2>
+          <p class="text-xs text-slate-500 pl-4">ฐานข้อมูลกลางเชื่อมต่อระบบคลาวด์ โรงพยาบาลทศมินทราธิราช</p>
+        </div>
+        <span id="filterBadge" class="text-xs bg-blue-900 text-amber-300 px-3.5 py-1.5 rounded-full font-bold shadow-sm">
+          กำลังโหลดข้อมูล...
+        </span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-navy-sub text-white text-xs uppercase tracking-wider border-b-2 border-amber-400">
+              <th class="p-3.5 font-semibold">สถานะอายุพัสดุ</th>
+              <th class="p-3.5 font-semibold">รายการพัสดุ / ขนาด (Size)</th>
+              <th class="p-3.5 font-semibold">Lot การผลิต & ชั้นวาง</th>
+              <th class="p-3.5 font-semibold">วันหมดอายุ (EXP)</th>
+              <th class="p-3.5 font-semibold">ยอดคงเหลือ / จุดสั่งซื้อ</th>
+              <th class="p-3.5 font-semibold text-center">การดำเนินการ</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryBody" class="divide-y divide-slate-200 text-sm"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Official Footer -->
+  <footer class="bg-navy-official text-blue-200 text-xs py-4 mt-8 border-t-2 border-amber-400 no-print">
+    <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+      <div>© งานคลังพัสดุทางการแพทย์ โรงพยาบาลทศมินทราธิราช กรมแพทย์ทหารอากาศ</div>
+      <div class="text-amber-300/90">มาตรฐานการบริหารเวชภัณฑ์ First-Expired, First-Out (FEFO)</div>
+    </div>
+  </footer>
+
+  <!-- Modal 1: Camera Barcode Scanner -->
+  <div id="scannerModal" class="fixed inset-0 bg-slate-950/80 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 border-t-4 border-amber-400 shadow-2xl">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-bold text-lg text-blue-950">📷 สแกนบาร์โค้ดพัสดุ / ชั้นวาง</h3>
+        <button onclick="closeScannerModal()" class="text-slate-400 hover:text-slate-700 font-bold text-xl">✕</button>
+      </div>
+      <div id="reader" class="w-full rounded-lg overflow-hidden border-2 border-blue-900 bg-black min-h-[250px]"></div>
+      <button onclick="closeScannerModal()" class="w-full bg-slate-200 hover:bg-slate-300 py-2.5 rounded-lg font-bold text-slate-800">ปิดกล้องสแกน</button>
+    </div>
+  </div>
+
+  <!-- Modal 2: Dispense & FEFO Check -->
+  <div id="actionModal" class="fixed inset-0 bg-slate-950/75 hidden items-center justify-center z-50 p-4">
+    <div id="actionCard" class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border-t-8 shadow-2xl">
+      <div class="flex justify-between items-start">
+        <div>
+          <span id="modalStatusBadge" class="text-xs font-bold px-2.5 py-1 rounded-full"></span>
+          <h3 id="modalTitle" class="text-xl font-bold text-blue-950 mt-2"></h3>
+          <p id="modalSize" class="text-sm font-bold text-blue-700"></p>
+        </div>
+        <button onclick="closeActionModal()" class="text-slate-400 hover:text-slate-700 text-xl font-bold">✕</button>
+      </div>
+      <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-sm space-y-1.5">
+        <div class="flex justify-between"><span class="text-slate-600">รหัสบาร์โค้ด (UDI):</span> <strong id="modalBarcode" class="font-mono text-blue-950"></strong></div>
+        <div class="flex justify-between"><span class="text-slate-600">เลขที่ผลิต (Lot):</span> <strong id="modalLot"></strong></div>
+        <div class="flex justify-between"><span class="text-slate-600">ตำแหน่งจัดเก็บ (Bin):</span> <strong id="modalBin" class="text-blue-800"></strong></div>
+        <div class="flex justify-between"><span class="text-slate-600">วันหมดอายุ (EXP):</span> <strong id="modalExp"></strong></div>
+        <div class="flex justify-between border-t pt-1.5 mt-1.5"><span class="text-slate-600 font-bold">ยอดคงเหลือในคลัง:</span> <strong id="modalQty" class="text-lg text-blue-950"></strong></div>
+      </div>
+      <div id="modalWarningBox" class="hidden p-3 rounded-lg text-sm font-bold"></div>
+      <div id="dispenseControls" class="space-y-3 pt-2">
+        <label class="block text-sm font-bold text-blue-950">ระบุจำนวนที่ต้องการเบิกจ่าย:</label>
+        <div class="flex items-center gap-3">
+          <button onclick="adjustDispense(-1)" class="w-12 h-12 bg-slate-200 hover:bg-slate-300 rounded-lg font-bold text-xl text-slate-800">-</button>
+          <input type="number" id="dispenseQty" value="1" min="1" class="flex-1 text-center border-2 border-blue-900/30 rounded-lg h-12 text-xl font-bold text-blue-950">
+          <button onclick="adjustDispense(1)" class="w-12 h-12 bg-slate-200 hover:bg-slate-300 rounded-lg font-bold text-xl text-slate-800">+</button>
+        </div>
+        <button id="btnConfirmDispense" onclick="confirmDispense()" class="w-full bg-navy-official hover:bg-blue-900 text-amber-300 border border-amber-400 py-3 rounded-xl font-bold shadow-lg transition">
+          ✅ ยืนยันการเบิกจ่ายและตัดบัญชีสต๊อก
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Receive New Stock -->
+  <div id="receiveModal" class="fixed inset-0 bg-slate-950/75 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border-t-4 border-amber-400 shadow-2xl">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="text-lg font-bold text-blue-950">📥 บันทึกรับพัสดุทางการแพทย์เข้าคลัง</h3>
+        <button onclick="document.getElementById('receiveModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-700 font-bold text-xl">✕</button>
+      </div>
+      <div class="space-y-3 text-sm">
+        <div>
+          <label class="font-bold text-blue-950">รหัสบาร์โค้ด (UDI / Barcode)</label>
+          <input type="text" id="recBarcode" placeholder="เช่น SUP-101-L01" class="w-full border border-slate-300 p-2 rounded-lg mt-1 font-mono focus:border-blue-800 focus:outline-none">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="font-bold text-blue-950">ชื่อรายการพัสดุ</label><input type="text" id="recName" placeholder="เช่น Syringe 10ml" class="w-full border border-slate-300 p-2 rounded-lg mt-1"></div>
+          <div><label class="font-bold text-blue-950">ขนาด (Size)</label><input type="text" id="recSize" placeholder="เช่น 10 ml" class="w-full border border-slate-300 p-2 rounded-lg mt-1"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="font-bold text-blue-950">Lot Number</label><input type="text" id="recLot" placeholder="เช่น LOT-26A" class="w-full border border-slate-300 p-2 rounded-lg mt-1"></div>
+          <div><label class="font-bold text-blue-950">พิกัดชั้นวาง (Bin)</label><input type="text" id="recBin" placeholder="เช่น A01-02" class="w-full border border-slate-300 p-2 rounded-lg mt-1"></div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div><label class="font-bold text-blue-950">วันหมดอายุ</label><input type="date" id="recExp" class="w-full border border-slate-300 p-2 rounded-lg mt-1"></div>
+          <div><label class="font-bold text-blue-950">จำนวนรับเข้า</label><input type="number" id="recQty" value="50" class="w-full border border-slate-300 p-2 rounded-lg mt-1"></div>
+          <div><label class="font-bold text-blue-950">จุดสั่งซื้อ (ROP)</label><input type="number" id="recRop" value="20" class="w-full border border-slate-300 p-2 rounded-lg mt-1"></div>
+        </div>
+      </div>
+      <button id="btnSaveStock" onclick="saveNewStock()" class="w-full bg-navy-official hover:bg-blue-900 text-amber-300 border border-amber-400 py-3 rounded-xl font-bold shadow transition">
+        บันทึกข้อมูลเข้าสู่ระบบคลังพัสดุ
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal 4: Barcode & Shelf Label Generator / Printer -->
+  <div id="printModal" class="fixed inset-0 bg-slate-950/75 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border-t-4 border-amber-400 shadow-2xl">
+      <div class="flex justify-between items-center border-b pb-2 no-print">
+        <h3 class="text-lg font-bold text-blue-950">🖨️ ระบบจัดพิมพ์ป้ายบาร์โค้ดและชั้นวาง</h3>
+        <button onclick="document.getElementById('printModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-700 font-bold text-xl">✕</button>
+      </div>
+
+      <div class="space-y-2 text-sm no-print">
+        <label class="font-bold text-blue-950">เลือกประเภทป้ายสติกเกอร์:</label>
+        <select id="labelType" onchange="updateLabelPreview()" class="w-full border border-slate-300 p-2 rounded-lg font-bold text-blue-950 bg-slate-50">
+          <option value="ITEM">📦 ป้ายติดบรรจุภัณฑ์พัสดุ (QR Code + Lot/EXP)</option>
+          <option value="BIN">📍 ป้ายติดขอบชั้นวาง (Barcode 1D + พิกัดชั้น)</option>
+        </select>
+
+        <label class="font-bold text-blue-950 block pt-1">ดึงข้อมูลจากบัญชีพัสดุในคลัง:</label>
+        <select id="labelItemSelect" onchange="fillLabelFromStock()" class="w-full border border-slate-300 p-2 rounded-lg">
+          <option value="">-- เลือกรายการพัสดุจากสต๊อก --</option>
+        </select>
+
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <input type="text" id="lblCode" oninput="updateLabelPreview()" placeholder="รหัสบาร์โค้ด (เช่น SUP-101-L01)" class="border border-slate-300 p-2 rounded font-mono text-xs">
+          <input type="text" id="lblTitle" oninput="updateLabelPreview()" placeholder="ชื่อพัสดุ / โซนชั้นวาง" class="border border-slate-300 p-2 rounded text-xs">
+          <input type="text" id="lblSub" oninput="updateLabelPreview()" placeholder="ขนาด / Lot (เช่น 10ml | L01)" class="border border-slate-300 p-2 rounded text-xs">
+          <input type="text" id="lblExp" oninput="updateLabelPreview()" placeholder="EXP / พิกัด (เช่น 2028-05-01)" class="border border-slate-300 p-2 rounded text-xs">
+        </div>
+      </div>
+
+      <!-- พื้นที่ตัวอย่างป้ายฉลากที่จะถูกสั่งพิมพ์ -->
+      <div id="printLabelArea" class="border-2 border-blue-950 p-4 rounded-xl bg-white text-center space-y-1.5 shadow-inner">
+        <div class="text-[10px] font-bold text-blue-950 border-b border-slate-300 pb-1 uppercase tracking-wider">
+          โรงพยาบาลทศมินทราธิราช • คลังพัสดุทางการแพทย์
+        </div>
+        <div id="previewHeader" class="font-bold text-base text-slate-900 pt-0.5">ชื่อพัสดุทางการแพทย์</div>
+        <div id="previewSub" class="text-xs font-bold text-blue-800">ขนาด / Lot</div>
+        <div class="flex justify-center py-1">
+          <div id="qrContainer"></div>
+          <svg id="barcode1DContainer" class="hidden"></svg>
+        </div>
+        <div id="previewFooter" class="text-xs font-mono font-bold text-slate-900 border-t border-slate-300 pt-1">EXP / Bin Location</div>
+      </div>
+
+      <button onclick="window.print()" class="no-print w-full bg-amber-400 hover:bg-amber-300 text-slate-950 py-3 rounded-xl font-bold shadow transition">
+        🖨️ สั่งพิมพ์ป้ายสติกเกอร์ทันที
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbzAuMKpN8bQaaI_gTFkhxtvtDJdM7KhXlGA_78351eJyPsG7QB39WpPlonXgwIF0zw5/exec';
+
+    let inventory = [];
+    let currentFilter = 'ALL';
+    let selectedItem = null;
+    let html5QrCode = null;
+
+    async function fetchInventoryFromSheets() {
+      document.getElementById('filterBadge').innerText = '⏳ กำลังซิงก์ข้อมูล...';
+      try {
+        const res = await fetch(GAS_API_URL);
+        const result = await res.json();
+        if (result.status === 'success') {
+          inventory = result.data || [];
+          populateLabelDropdown();
+          filterTable(currentFilter);
+        } else {
+          document.getElementById('filterBadge').innerText = '⚠️ โหลดข้อมูลไม่สำเร็จ';
+        }
+      } catch (err) {
+        document.getElementById('filterBadge').innerText = '⚠️ เชื่อมต่อฐานข้อมูลไม่ได้';
+      }
+    }
+
+    function getDaysUntilExpiry(expDateStr) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const exp = new Date(expDateStr);
+      exp.setHours(0, 0, 0, 0);
+      return Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+    }
+
+    function getExpiryStatus(days) {
+      if (days <= 0) return { code: 'EXPIRED', label: '🔴 หมดอายุแล้ว', color: 'bg-red-100 text-red-800 border-red-300', rowBg: 'bg-red-50/70' };
+      if (days <= 90) return { code: 'CRITICAL', label: `🟠 เหลือ ${days} วัน`, color: 'bg-amber-100 text-amber-900 border-amber-400', rowBg: 'bg-amber-50/50' };
+      if (days <= 180) return { code: 'WARNING', label: `🟡 เหลือ ${days} วัน`, color: 'bg-yellow-100 text-yellow-800 border-yellow-300', rowBg: '' };
+      return { code: 'NORMAL', label: `🟢 ปกติ (${days} วัน)`, color: 'bg-emerald-100 text-emerald-800 border-emerald-300', rowBg: '' };
+    }
+
+    function renderDashboard() {
+      inventory.sort((a, b) => new Date(a.expDate) - new Date(b.expDate));
+      let expiredCount = 0, criticalCount = 0, ropCount = 0;
+      const tbody = document.getElementById('inventoryBody');
+      tbody.innerHTML = '';
+
+      inventory.forEach(item => {
+        const days = getDaysUntilExpiry(item.expDate);
+        const status = getExpiryStatus(days);
+        const isLowStock = Number(item.qty) <= Number(item.rop);
+
+        if (status.code === 'EXPIRED') expiredCount++;
+        if (status.code === 'CRITICAL') criticalCount++;
+        if (isLowStock) ropCount++;
+
+        if (currentFilter === 'EXPIRED' && status.code !== 'EXPIRED') return;
+        if (currentFilter === 'CRITICAL' && status.code !== 'CRITICAL') return;
+        if (currentFilter === 'ROP' && !isLowStock) return;
+
+        const tr = document.createElement('tr');
+        tr.className = `hover:bg-blue-50/60 transition ${status.rowBg}`;
+        tr.innerHTML = `
+          <td class="p-3.5 whitespace-nowrap"><span class="px-2.5 py-1 rounded-full text-xs font-bold border ${status.color}">${status.label}</span></td>
+          <td class="p-3.5">
+            <div class="font-bold text-blue-950">${item.name}</div>
+            <div class="text-xs font-semibold text-blue-700">ขนาด: ${item.size}</div>
+            <div class="text-[11px] text-slate-400 font-mono">${item.barcode}</div>
+          </td>
+          <td class="p-3.5 whitespace-nowrap">
+            <div class="font-semibold text-slate-800">${item.lot}</div>
+            <div class="text-xs bg-blue-50 text-blue-900 border border-blue-200 px-2 py-0.5 rounded inline-block font-bold mt-0.5">📍 ชั้นวาง: ${item.bin}</div>
+          </td>
+          <td class="p-3.5 whitespace-nowrap font-bold ${days <= 0 ? 'text-red-600 underline' : 'text-slate-700'}">${item.expDate}</td>
+          <td class="p-3.5 whitespace-nowrap">
+            <div class="font-bold text-base ${isLowStock ? 'text-indigo-700' : 'text-slate-800'}">${item.qty} <span class="text-xs font-normal">${item.unit}</span></div>
+            ${isLowStock ? `<span class="text-[11px] bg-indigo-100 text-indigo-900 border border-indigo-200 px-2 py-0.5 rounded font-bold">⚠️ ต่ำกว่า ROP (${item.rop})</span>` : `<span class="text-[11px] text-slate-400">เกณฑ์ ROP: ${item.rop}</span>`}
+          </td>
+          <td class="p-3.5 text-center">
+            <button onclick="processBarcode('${item.barcode}')" class="bg-navy-official hover:bg-blue-800 text-amber-300 border border-amber-400/50 text-xs px-3.5 py-1.5 rounded-lg font-bold shadow-sm transition">
+              เบิกจ่าย
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('kpiExpired').innerText = expiredCount;
+      document.getElementById('kpiCritical').innerText = criticalCount;
+      document.getElementById('kpiRop').innerText = ropCount;
+      document.getElementById('kpiTotal').innerText = inventory.length;
+    }
+
+    function filterTable(type) {
+      currentFilter = type;
+      const labels = { 'ALL': 'แสดงทั้งหมด', 'EXPIRED': 'หมดอายุแล้ว', 'CRITICAL': 'ใกล้หมดอายุ (<90 วัน)', 'ROP': 'ต่ำกว่าจุดสั่งซื้อ' };
+      document.getElementById('filterBadge').innerText = `ตัวกรอง: ${labels[type]}`;
+      renderDashboard();
+    }
+
+    function processBarcode(code) {
+      const cleanCode = code.trim().toUpperCase();
+      if (!cleanCode) return;
+      const item = inventory.find(i => String(i.barcode).toUpperCase() === cleanCode);
+      if (!item) return alert(`❌ ไม่พบรหัสบาร์โค้ด "${cleanCode}" ในฐานข้อมูล`);
+
+      selectedItem = item;
+      const days = getDaysUntilExpiry(item.expDate);
+      const status = getExpiryStatus(days);
+      const olderLot = inventory.find(other => other.medCode === item.medCode && other.id !== item.id && Number(other.qty) > 0 && getDaysUntilExpiry(other.expDate) > 0 && new Date(other.expDate) < new Date(item.expDate));
+
+      const card = document.getElementById('actionCard');
+      const badge = document.getElementById('modalStatusBadge');
+      const warningBox = document.getElementById('modalWarningBox');
+      const dispenseControls = document.getElementById('dispenseControls');
+
+      document.getElementById('modalTitle').innerText = item.name;
+      document.getElementById('modalSize').innerText = `ขนาด: ${item.size}`;
+      document.getElementById('modalBarcode').innerText = item.barcode;
+      document.getElementById('modalLot').innerText = item.lot;
+      document.getElementById('modalBin').innerText = item.bin;
+      document.getElementById('modalExp').innerText = item.expDate;
+      document.getElementById('modalQty').innerText = `${item.qty} ${item.unit}`;
+      document.getElementById('dispenseQty').value = 1;
+
+      badge.className = `text-xs font-bold px-2.5 py-1 rounded-full border ${status.color}`;
+      badge.innerText = status.label;
+      warningBox.classList.add('hidden');
+      dispenseControls.classList.remove('hidden');
+
+      if (days <= 0) {
+        card.className = 'bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border-t-8 border-red-600 shadow-2xl';
+        warningBox.className = 'p-3 rounded-lg text-sm font-bold bg-red-100 text-red-800 border border-red-300';
+        warningBox.innerHTML = '🛑 ห้ามเบิกจ่าย! พัสดุ Lot นี้หมดอายุแล้ว ระบบระงับการตัดสต๊อกทันที';
+        warningBox.classList.remove('hidden');
+        dispenseControls.classList.add('hidden');
+      } else if (olderLot) {
+        card.className = 'bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border-t-8 border-amber-500 shadow-2xl';
+        warningBox.className = 'p-3 rounded-lg text-sm font-bold bg-amber-100 text-amber-900 border border-amber-400';
+        warningBox.innerHTML = `⚠️ คำเตือนตามหลัก FEFO: มี <u>${olderLot.lot}</u> (ชั้น ${olderLot.bin}) หมดอายุเร็วกว่า (${olderLot.expDate}) คงเหลือ ${olderLot.qty} ${olderLot.unit}`;
+        warningBox.classList.remove('hidden');
+      } else {
+        card.className = 'bg-white rounded-2xl max-w-md w-full p-6 space-y-4 border-t-8 border-blue-900 shadow-2xl';
+      }
+
+      document.getElementById('actionModal').classList.remove('hidden');
+      document.getElementById('actionModal').classList.add('flex');
+      document.getElementById('barcodeInput').value = '';
+    }
+
+    function adjustDispense(delta) {
+      const input = document.getElementById('dispenseQty');
+      let val = parseInt(input.value) + delta;
+      if (val < 1) val = 1;
+      if (selectedItem && val > Number(selectedItem.qty)) val = Number(selectedItem.qty);
+      input.value = val;
+    }
+
+    async function confirmDispense() {
+      if (!selectedItem) return;
+      const btn = document.getElementById('btnConfirmDispense');
+      btn.disabled = true; btn.innerText = '⏳ กำลังบันทึกข้อมูล...';
+      try {
+        const res = await fetch(GAS_API_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'DISPENSE',
+            barcode: selectedItem.barcode,
+            qty: parseInt(document.getElementById('dispenseQty').value),
+            staffName: document.getElementById('staffNameInput').value
+          })
+        });
+        const result = await res.json();
+        if (result.status === 'success') { closeActionModal(); await fetchInventoryFromSheets(); }
+        else alert('❌ ' + result.message);
+      } catch (err) { alert('เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล'); }
+      finally { btn.disabled = false; btn.innerText = '✅ ยืนยันการเบิกจ่ายและตัดบัญชีสต๊อก'; }
+    }
+
+    function closeActionModal() {
+      document.getElementById('actionModal').classList.add('hidden');
+      document.getElementById('actionModal').classList.remove('flex');
+    }
+
+    function openReceiveModal() {
+      document.getElementById('receiveModal').classList.remove('hidden');
+      document.getElementById('receiveModal').classList.add('flex');
+    }
+
+    async function saveNewStock() {
+      const barcode = document.getElementById('recBarcode').value.trim();
+      const name = document.getElementById('recName').value.trim();
+      const expDate = document.getElementById('recExp').value;
+      if (!barcode || !name || !expDate) return alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+
+      const btn = document.getElementById('btnSaveStock');
+      btn.disabled = true; btn.innerText = '⏳ กำลังบันทึกข้อมูล...';
+      try {
+        await fetch(GAS_API_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'RECEIVE',
+            staffName: document.getElementById('staffNameInput').value,
+            item: {
+              medCode: barcode.split('-').slice(0, 2).join('-'),
+              barcode, name,
+              size: document.getElementById('recSize').value.trim() || '-',
+              lot: document.getElementById('recLot').value.trim() || 'LOT-NEW',
+              bin: document.getElementById('recBin').value.trim() || 'A01-01',
+              expDate,
+              qty: parseInt(document.getElementById('recQty').value) || 1,
+              rop: parseInt(document.getElementById('recRop').value) || 10,
+              unit: 'ชิ้น'
+            }
+          })
+        });
+        document.getElementById('receiveModal').classList.add('hidden');
+        await fetchInventoryFromSheets();
+      } finally { btn.disabled = false; btn.innerText = 'บันทึกข้อมูลเข้าสู่ระบบคลังพัสดุ'; }
+    }
+
+    function openPrintModal() {
+      document.getElementById('printModal').classList.remove('hidden');
+      document.getElementById('printModal').classList.add('flex');
+      updateLabelPreview();
+    }
+
+    function populateLabelDropdown() {
+      const sel = document.getElementById('labelItemSelect');
+      sel.innerHTML = '<option value="">-- เลือกรายการพัสดุจากสต๊อก --</option>';
+      inventory.forEach((item, idx) => {
+        sel.innerHTML += `<option value="${idx}">${item.name} (${item.size}) - Lot: ${item.lot}</option>`;
+      });
+    }
+
+    function fillLabelFromStock() {
+      const idx = document.getElementById('labelItemSelect').value;
+      if (idx === '') return;
+      const item = inventory[idx];
+      const type = document.getElementById('labelType').value;
+      if (type === 'ITEM') {
+        document.getElementById('lblCode').value = item.barcode;
+        document.getElementById('lblTitle').value = item.name;
+        document.getElementById('lblSub').value = `ขนาด: ${item.size} | Lot: ${item.lot}`;
+        document.getElementById('lblExp').value = `EXP: ${item.expDate} | ชั้นวาง: ${item.bin}`;
+      } else {
+        document.getElementById('lblCode').value = `LOC-${item.bin}`;
+        document.getElementById('lblTitle').value = `พิกัดชั้นวาง: ${item.bin}`;
+        document.getElementById('lblSub').value = `${item.name} (${item.size})`;
+        document.getElementById('lblExp').value = `รหัสชั้นวาง: LOC-${item.bin}`;
+      }
+      updateLabelPreview();
+    }
+
+    function updateLabelPreview() {
+      const type = document.getElementById('labelType').value;
+      const code = document.getElementById('lblCode').value.trim() || 'SUP-101-L01';
+      document.getElementById('previewHeader').innerText = document.getElementById('lblTitle').value || 'Disposable Syringe';
+      document.getElementById('previewSub').innerText = document.getElementById('lblSub').value || 'ขนาด: 10 ml | Lot: LOT-26A';
+      document.getElementById('previewFooter').innerText = document.getElementById('lblExp').value || 'EXP: 2028-05-01 | ชั้นวาง: A01-02';
+
+      const qrDiv = document.getElementById('qrContainer');
+      const barSvg = document.getElementById('barcode1DContainer');
+      qrDiv.innerHTML = '';
+
+      if (type === 'ITEM') {
+        qrDiv.classList.remove('hidden');
+        barSvg.classList.add('hidden');
+        new QRCode(qrDiv, { text: code, width: 105, height: 105 });
+      } else {
+        qrDiv.classList.add('hidden');
+        barSvg.classList.remove('hidden');
+        JsBarcode("#barcode1DContainer", code, { format: "CODE128", width: 2, height: 50, displayValue: true });
+      }
+    }
+
+    function openScannerModal() {
+      document.getElementById('scannerModal').classList.remove('hidden');
+      document.getElementById('scannerModal').classList.add('flex');
+      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 150 } },
+        (decodedText) => { closeScannerModal(); processBarcode(decodedText); }, () => {}
+      ).catch(() => { alert("ต้องเปิดใช้งานผ่าน HTTPS เพื่อเข้าถึงกล้องอุปกรณ์"); closeScannerModal(); });
+    }
+
+    function closeScannerModal() {
+      if (html5QrCode) html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
+      document.getElementById('scannerModal').classList.add('hidden');
+      document.getElementById('scannerModal').classList.remove('flex');
+    }
+
+    fetchInventoryFromSheets();
+  </script>
+</body>
+</html>
